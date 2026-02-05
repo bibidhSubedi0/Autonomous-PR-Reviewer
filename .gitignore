@@ -3,6 +3,5 @@ myenv
 __pycache__
 personal_notes
 .pytest_cache
-test
 test_validate
 tests

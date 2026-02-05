@@ -65,7 +65,7 @@ def cleanup_repo(local_path: str):
         try:
             # onerror=on_rm_error handles the read-only git files
             shutil.rmtree(local_path, onerror=on_rm_error)
-            print(f"🧹 Cleaned up {local_path}")
+            print(f" Cleaned up {local_path}")
         except Exception as e:
             print(f" Warning: Cleanup failed partially: {e}")
         finally:
