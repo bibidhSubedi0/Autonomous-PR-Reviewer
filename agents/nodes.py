@@ -1,48 +1,71 @@
 import os
 from agents.state import AgentState
+from tools.git_ops import clone_repository, get_diff, cleanup_repo
 from tools.linters import lint_repo
 from tools.ai_ops import analyze_code_with_gemini
 
-def linter_node(state: AgentState):
-    """Node: Checks code style using the Dispatcher."""
-    local_dir = state.get("local_path")
-    
-    if not local_dir or not os.path.exists(local_dir):
-        return {"lint_errors": ["Error: Code not found."]}
+def clone_node(state: AgentState):
+    """1. Clones the repo and calculates the diff."""
+    print(f"\n[INFO] Cloning {state['repo_url']}...")
+    try:
+        # Clone the repo
+        local_path = clone_repository(state["repo_url"], state["commit_sha"], state["github_token"])
+        
+        # Get Diff (Compare against 'main' for PRs)
+        diff = get_diff(local_path, target_branch="main")
+        
+        return {
+            "local_path": local_path,
+            "diff_content": diff,
+            "review_status": "cloned"
+        }
+    except Exception as e:
+        print(f"[ERROR] Clone failed: {e}")
+        return {"review_status": "failed"}
 
-    # Call the Dispatcher
-    errors = lint_repo(local_dir)
+def linter_node(state: AgentState):
+    """2. Checks for syntax errors."""
+    local_path = state.get("local_path")
+    
+    if not local_path:
+        return {"review_status": "failed"}
+
+    print("[INFO] Running Linter...")
+    errors = lint_repo(local_path)
     
     if errors:
-        print(f"Linter found {len(errors)} issues.")
+        print(f"[WARN] Linter found {len(errors)} issues. Stopping early.")
         return {
             "lint_errors": errors,
-            "review_status": "lint_failed"
+            "review_status": "lint_failed" 
         }
     
-    print("Linter passed (or no lintable files found).")
+    print("[INFO] Linter passed.")
     return {
         "lint_errors": [],
         "review_status": "lint_passed"
     }
 
 def ai_review_node(state: AgentState):
-    """Node: Critiques the logic."""
+    """3. Uses Gemini to find bugs."""
     diff = state.get("diff_content")
     
     if not diff:
-        print("Skipping AI: Empty diff.")
-        return {"comments": []}
-        
-    if len(diff) > 30000:
-        print("Skipping AI: Diff too large (>30k chars).")
-        return {"comments": []}
+        print("[INFO] Skipping AI: Diff is empty.")
+        return {"comments": [], "review_status": "completed"}
 
-    print("Sending diff to Gemini...")
+    print("[INFO] Asking Gemini...")
     comments = analyze_code_with_gemini(diff)
     
-    print(f"Gemini found {len(comments)} logic issues.")
     return {
         "comments": comments,
         "review_status": "completed"
     }
+
+def cleanup_node(state: AgentState):
+    """4. Deletes the temp folder."""
+    local_path = state.get("local_path")
+    if local_path:
+        print(f"[INFO] Cleaning up {local_path}...")
+        cleanup_repo(local_path)
+    return {"review_status": "done"}
