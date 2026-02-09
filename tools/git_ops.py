@@ -34,20 +34,19 @@ def clone_repository(repo_url: str, commit_sha: str, token: str) -> str:
 def get_diff(local_path: str, target_branch: str = "main") -> str:
     """Gets the diff between HEAD and target."""
     try:
-        # Fetch target info first
         subprocess.run(
             ["git", "fetch", "origin", target_branch, "--depth", "1"], 
             cwd=local_path, check=True, capture_output=True
         )
-        # Get diff
         result = subprocess.run(
-            ["git", "diff", f"origin/{target_branch}...HEAD"],
+            ["git", "diff", f"origin/{target_branch}", "HEAD"],
             cwd=local_path, capture_output=True, text=True, check=True
         )
+        
         return result.stdout
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
+        print(f" Git Diff Failed: {e}")
         return ""
-    
 
 def cleanup_repo(local_path: str):
     """Deletes the temporary folder, handling Windows read-only files."""

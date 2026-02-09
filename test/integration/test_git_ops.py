@@ -21,17 +21,17 @@ def run_integration_test():
 
     # --- INPUT REQUIRED ---
     # Paste your SHA here, or the script will ask for it
-    commit_sha = "b2e557738982a7b58f2de8241cd493d0c7a7fbd8"
+    commit_sha = "9e22cfe5a2448fb3ce6538b2eaa4242781cf6231"
     
     if len(commit_sha) < 40:
         print(" Warning: That looks too short to be a full SHA, but trying anyway...")
 
-    print(f"\n🚀 Starting Integration Test on {repo_url}...")
+    print(f"\nStarting Integration Test on {repo_url}...")
     local_path = None
 
     try:
         # 1. Test Cloning
-        print("1️⃣  Testing Clone...", end=" ", flush=True)
+        print("Testing Clone...", end=" ", flush=True)
         local_path = clone_repository(repo_url, commit_sha, token)
         
         # Verify file existence
@@ -43,14 +43,14 @@ def run_integration_test():
             return
 
         # 2. Test Diffing
-        print("2️⃣  Testing Diff vs 'main'...", end=" ", flush=True)
+        print("Testing Diff vs 'main'...", end=" ", flush=True)
         # Note: If your main branch is called 'master', change 'main' below
         diff = get_diff(local_path, target_branch="main")
         
         if diff:
             print("Success!")
-            print(f"   📄 Diff Length: {len(diff)} chars")
-            print(f"   👀 First 50 chars: {diff[:50].replace('\n', ' ')}...")
+            print(f"Diff Length: {len(diff)} chars")
+            print(f"First 50 chars: {diff[:50].replace('\n', ' ')}...")
         else:
             print("  Warning: Diff is empty (Did you clone the same commit as main?)")
 
