@@ -3,6 +3,7 @@ import logging
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from tools.github_poster import post_review_comments
+from tools.auth import get_installation_access_token
 
 # Import agent
 from agents.graph import app
@@ -28,6 +29,18 @@ def github_webhook():
     if not data or 'pull_request' not in data:
         return jsonify({"status": "ignored", "reason": "Not a PR event"}), 200
 
+
+    if 'installation' not in data:
+        return jsonify({"status": "ignored", "reason": "No installation ID. Is this a GitHub App?"}), 200
+        
+    installation_id = data['installation']['id']
+    dynamic_token = get_installation_access_token(installation_id)
+    
+    if not dynamic_token:
+        return jsonify({"status": "error", "reason": "Could not generate auth token"}), 500
+    
+    
+
     action = data.get('action')
     if action not in ['opened', 'synchronize', 'reopened']:
         return jsonify({"status": "ignored", "reason": f"Action {action} not supported"}), 200
@@ -46,7 +59,7 @@ def github_webhook():
     initial_state = {
         "repo_url": repo_url,
         "commit_sha": commit_sha,
-        "github_token": os.getenv("GITHUB_TOKEN"),
+        "github_token": dynamic_token,
         "review_status": "pending",
         "lint_errors": [],
         "comments": []
@@ -60,7 +73,7 @@ def github_webhook():
             repo_url, 
             pr_number, 
             result['comments'], 
-            os.getenv("GITHUB_TOKEN")
+            dynamic_token
         )
     
     # 4. Return Summary
