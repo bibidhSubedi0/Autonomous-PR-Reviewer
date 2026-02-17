@@ -23,7 +23,7 @@ def analyze_code_with_gemini(diff: str) -> List[Dict]:
     # The correct identifiers are "gemini-1.5-flash-latest" (stable)
     # or "gemini-2.0-flash" (latest generation).
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash-latest",
+        model_name="gemini-1.5-flash",
         generation_config={"response_mime_type": "application/json"},
     )
 
