@@ -1,31 +1,22 @@
-import warnings
-warnings.filterwarnings("ignore", category=FutureWarning)
-
 import os
 import json
-import google.generativeai as genai
 from typing import List, Dict
+from google import genai
+from google.genai import types
 
 
 def analyze_code_with_gemini(diff: str) -> List[Dict]:
     """
-    Sends the diff to Gemini Flash and enforces JSON output.
+    Sends the diff to Gemini and enforces JSON output.
+    Uses the new google-genai SDK (replaces deprecated google-generativeai).
     Supports Python, C/C++, and JavaScript/TypeScript diffs.
     """
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        print("Error: GEMINI_API_KEY not found in .env")
+        print("[ai_ops] Error: GEMINI_API_KEY not found in environment.")
         return []
 
-    genai.configure(api_key=api_key)
-
-    # FIX: "gemini-flash-latest" is not a valid model string.
-    # The correct identifiers are "gemini-1.5-flash-latest" (stable)
-    # or "gemini-2.0-flash" (latest generation).
-    model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
-        generation_config={"response_mime_type": "application/json"},
-    )
+    client = genai.Client(api_key=api_key)
 
     system_prompt = """
 You are a Senior Software Engineer acting as a Code Reviewer.
@@ -51,17 +42,19 @@ OUTPUT: A strictly valid JSON array. Each object must match this schema exactly:
 Return [] if no issues are found. Do not include any text outside the JSON array.
 """
 
-    user_prompt = f"Here is the diff to review:\n\n{diff}"
-
     try:
-        response = model.generate_content([system_prompt, user_prompt])
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=f"{system_prompt}\n\nHere is the diff to review:\n\n{diff}",
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+            ),
+        )
 
-        # Strip accidental markdown fences (defensive — mime type should prevent this)
         raw = response.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         comments = json.loads(raw)
 
         if isinstance(comments, list):
-            # Validate that each entry has the required keys; drop malformed ones
             valid = []
             for item in comments:
                 if isinstance(item, dict) and {"file", "line", "comment"} <= item.keys():
