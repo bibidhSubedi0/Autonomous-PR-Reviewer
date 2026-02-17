@@ -1,48 +1,52 @@
 import os
 import requests
 
-def post_review_comments(repo_url, pr_number, comments, token):
+
+def post_review_comments(repo_url: str, pr_number: int, comments: list, token: str):
     """
-    Takes the AI comments and posts them to the Pull Request.
+    Takes the AI comments and posts them to the Pull Request as a review.
     """
     if not comments:
-        print("No comments to post.")
+        print("[poster] No comments to post.")
         return
 
-    # 1. Convert Repo URL to API URL
-    # From: https://github.com/bibidhSubedi0/Test_Repo_For_APPR.git
-    # To:   https://api.github.com/repos/bibidhSubedi0/Test_Repo_For_APPR
+    # Convert clone URL to API URL
+    # From: https://github.com/owner/repo.git
+    # To:   https://api.github.com/repos/owner/repo/pulls/{pr_number}/reviews
     owner_repo = repo_url.replace("https://github.com/", "").replace(".git", "")
     api_url = f"https://api.github.com/repos/{owner_repo}/pulls/{pr_number}/reviews"
 
-    # 2. Format Comments for GitHub API
+    # Format comments for the GitHub Pull Request Review API
     github_comments = []
     for c in comments:
         github_comments.append({
             "path": c["file"],
             "line": int(c["line"]),
-            "body": f"**AI Review:** {c['comment']}"
+            "body": f"**AI Review:** {c['comment']}",
         })
 
     payload = {
-        "body": "Here is my automated review based on the changes.",
-        "event": "COMMENT", # or "REQUEST_CHANGES"
-        "comments": github_comments
+        "body": "Automated review based on the diff changes.",
+        "event": "COMMENT",   # Use "REQUEST_CHANGES" to block merging
+        "comments": github_comments,
     }
 
     headers = {
         "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github.v3+json"
+        "Accept": "application/vnd.github.v3+json",
     }
 
-    # 3. Send the POST Request
-    print(f"Posting {len(comments)} comments to PR #{pr_number}...")
+    print(f"[poster] Posting {len(comments)} comment(s) to PR #{pr_number}...")
     try:
         response = requests.post(api_url, json=payload, headers=headers)
-        if response.status_code == 200:
-            print("Successfully posted review!")
+
+        # FIX: GitHub returns 200 when updating an existing review and 201 when
+        # creating a new one. Checking == 200 silently ignores the 201 success
+        # case. response.ok covers both (and any other 2xx code).
+        if response.ok:
+            print(f"[poster] Review posted successfully (HTTP {response.status_code}).")
         else:
-            print(f"Failed to post review: {response.status_code}")
+            print(f"[poster] Failed to post review: HTTP {response.status_code}")
             print(response.text)
-    except Exception as e:
-        print(f"Connection Error: {e}")
+    except requests.exceptions.RequestException as e:
+        print(f"[poster] Connection error: {e}")
