@@ -56,6 +56,10 @@ Return [] if no issues are found. Do not include any text outside the JSON array
 
         if isinstance(comments, list):
             valid = []
+            # After the valid = [] loop, before return:
+            if len(valid) > 10:
+                print(f"[ai_ops] Capping comments from {len(valid)} to 10.")
+                valid = valid[:10]
             for item in comments:
                 if isinstance(item, dict) and {"file", "line", "comment"} <= item.keys():
                     valid.append(item)
