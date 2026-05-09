@@ -25,10 +25,8 @@ def clone_repository(repo_url: str, commit_sha: str, token: str) -> str:
         return temp_dir
 
     except subprocess.CalledProcessError as e:
-        # Cleanup on failure to not leave junk folders
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
-        # Re-raise so the caller knows it failed
         raise RuntimeError(f"Git Clone Failed: {e}")
 
 def get_diff(local_path: str, target_branch: str = "main") -> str:
@@ -52,27 +50,14 @@ def cleanup_repo(local_path: str):
     """Deletes the temporary folder, handling Windows read-only files."""
     
     def on_rm_error(func, path, exc_info):
-        """
-        Error handler for shutil.rmtree.
-        If the error is due to an access error (read only file),
-        it attempts to add write permission and then retries.
-        """
         os.chmod(path, stat.S_IWRITE)
         os.unlink(path)
 
     if local_path and os.path.exists(local_path):
         try:
-            # onerror=on_rm_error handles the read-only git files
             shutil.rmtree(local_path, onerror=on_rm_error)
             print(f" Cleaned up {local_path}")
         except Exception as e:
             print(f" Warning: Cleanup failed partially: {e}")
         finally:
-            # if local_path:
-            #     print("Testing Cleanup...", end=" ", flush=True)
-            #     cleanup_repo(local_path)
-            #     if not os.path.exists(local_path):
-            #         print("Success!")
-            #     else:
-            #         print("Failed to delete temp dir.")
             pass
