@@ -23,6 +23,7 @@ def get_installation_access_token(installation_id):
     try:
         integration = GithubIntegration(app_id, private_key)
         access_token = integration.get_access_token(installation_id).token
+        print(f"[DEBUG] Token: {access_token[:10] if access_token else 'NONE'}")
         return access_token
     except Exception as e:
         print(f"Auth Failed: {e}")
