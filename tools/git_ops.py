@@ -2,7 +2,12 @@ import os
 import shutil
 import stat
 import subprocess
+import base64
 from tempfile import mkdtemp
+
+def _auth_header(token: str) -> str:
+    encoded = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+    return f"http.extraheader=Authorization: Basic {encoded}"
 
 def _git_env():
     env = os.environ.copy()
@@ -14,16 +19,16 @@ def _git_env():
 def clone_repository(repo_url: str, commit_sha: str, token: str) -> str:
     """Clones a specific commit to a temp dir."""
     temp_dir = mkdtemp()
-    auth_url = repo_url.replace("https://", f"https://x-access-token:{token}@")
+    auth_header = _auth_header(token)
     
     try:
         # 1. Init
         subprocess.run(["git", "init"], cwd=temp_dir, check=True, capture_output=True, env=_git_env())
-        # 2. Remote
-        subprocess.run(["git", "remote", "add", "origin", auth_url], cwd=temp_dir, check=True, capture_output=True, env=_git_env())
-        # 3. Fetch (Shallow)
+        # 2. Remote — plain URL, token never stored in .git/config
+        subprocess.run(["git", "remote", "add", "origin", repo_url], cwd=temp_dir, check=True, capture_output=True, env=_git_env())
+        # 3. Fetch (Shallow) — token passed transiently via -c, not persisted
         subprocess.run(
-            ["git", "fetch", "--depth", "1", "origin", commit_sha], 
+            ["git", "-c", auth_header, "fetch", "--depth", "1", "origin", commit_sha], 
             cwd=temp_dir, check=True, capture_output=True, env=_git_env()
         )
         # 4. Checkout
