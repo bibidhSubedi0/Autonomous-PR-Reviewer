@@ -11,8 +11,8 @@ def clone_node(state: AgentState):
         # Clone the repo
         local_path = clone_repository(state["repo_url"], state["commit_sha"], state["github_token"])
         
-        # Get Diff (Compare against 'main' for PRs)
-        diff = get_diff(local_path, target_branch="main")
+        # Get Diff — use the actual target branch from the PR, not a hardcoded default
+        diff = get_diff(local_path, target_branch=state["target_branch"], token=state["github_token"])
         
         return {
             "local_path": local_path,
@@ -24,7 +24,7 @@ def clone_node(state: AgentState):
         return {"review_status": "failed"}
 
 def linter_node(state: AgentState):
-    """2. Checks for syntax errors."""
+    """2. Runs linters to find style and syntax issues."""
     local_path = state.get("local_path")
     
     if not local_path:

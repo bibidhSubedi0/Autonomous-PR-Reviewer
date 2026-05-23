@@ -41,11 +41,12 @@ def clone_repository(repo_url: str, commit_sha: str, token: str) -> str:
             shutil.rmtree(temp_dir)
         raise RuntimeError(f"Git Clone Failed: {e}\nSTDOUT: {e.stdout}\nSTDERR: {e.stderr}")
 
-def get_diff(local_path: str, target_branch: str = "main") -> str:
-    """Gets the diff between HEAD and target."""
+def get_diff(local_path: str, target_branch: str, token: str) -> str:
+    """Gets the diff between HEAD and target branch."""
+    auth_header = _auth_header(token)
     try:
         subprocess.run(
-            ["git", "fetch", "origin", target_branch, "--depth", "1"], 
+            ["git", "-c", auth_header, "fetch", "origin", target_branch, "--depth", "1"],
             cwd=local_path, check=True, capture_output=True, env=_git_env()
         )
         result = subprocess.run(
