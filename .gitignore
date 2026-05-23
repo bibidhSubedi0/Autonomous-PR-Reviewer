@@ -6,3 +6,5 @@ personal_notes
 test_validate
 tests
 venv
+list_dir.py
+dry_run.py
