@@ -2,6 +2,7 @@ import os
 import hmac
 import hashlib
 import logging
+import threading
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from tools.github_poster import post_review_comments
@@ -67,9 +68,8 @@ def github_webhook():
 
     logger.info(f"PR #{pr_number} detected! Commit: {commit_sha}")
 
-    # 3. Trigger the autonomous agent
-    # FIX: pr_number was missing from the initial state dict even though
-    # AgentState declares it as a required field.
+    # 3. Trigger the autonomous agent in a background thread so we can
+    #    return 202 immediately and not block the Flask worker.
     initial_state = {
         "repo_url":     repo_url,
         "pr_number":    pr_number,
@@ -80,21 +80,19 @@ def github_webhook():
         "comments":     [],
     }
 
-    result = app.invoke(initial_state)
+    def run_review():
+        result = app.invoke(initial_state)
+        if result.get('comments'):
+            post_review_comments(
+                repo_url,
+                pr_number,
+                result['comments'],
+                dynamic_token,
+            )
 
-    # 4. Post results to GitHub
-    if result.get('comments'):
-        post_review_comments(
-            repo_url,
-            pr_number,
-            result['comments'],
-            dynamic_token,
-        )
+    threading.Thread(target=run_review, daemon=True).start()
 
-    return jsonify({
-        "status": "success",
-        "comments_posted": len(result.get('comments', [])),
-    }), 200
+    return jsonify({"status": "accepted"}), 202
 
 
 if __name__ == '__main__':
