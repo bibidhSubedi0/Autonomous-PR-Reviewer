@@ -1,4 +1,6 @@
 import os
+import hmac
+import hashlib
 import logging
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
@@ -18,12 +20,24 @@ logger = logging.getLogger(__name__)
 server = Flask(__name__)
 
 
+def verify_signature(payload_bytes: bytes, signature_header: str) -> bool:
+    secret_key = "GITHUB_WEBHOOK_SECRET_DEV" if os.getenv("ENV") == "dev" else "GITHUB_WEBHOOK_SECRET"
+    secret = os.getenv(secret_key, "")
+    expected = "sha256=" + hmac.new(secret.encode(), payload_bytes, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature_header or "")
+
+
 @server.route('/webhook', methods=['POST'])
 def github_webhook():
     """
     Webhook listener. GitHub POSTs here whenever a Pull Request is
     opened, synchronized, or reopened.
     """
+    # 0. Verify the request is actually from GitHub
+    signature = request.headers.get("X-Hub-Signature-256", "")
+    if not verify_signature(request.get_data(), signature):
+        return jsonify({"status": "error", "reason": "Invalid signature"}), 401
+
     data = request.json
 
     # 1. Validate: must be a PR event from a GitHub App installation
