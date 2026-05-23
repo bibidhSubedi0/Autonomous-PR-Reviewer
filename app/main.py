@@ -62,22 +62,24 @@ def github_webhook():
     pr_info   = data['pull_request']
     repo_info = data['repository']
 
-    repo_url   = repo_info['clone_url']
-    commit_sha = pr_info['head']['sha']
-    pr_number  = pr_info['number']
+    repo_url      = repo_info['clone_url']
+    commit_sha    = pr_info['head']['sha']
+    pr_number     = pr_info['number']
+    target_branch = pr_info['base']['ref']
 
-    logger.info(f"PR #{pr_number} detected! Commit: {commit_sha}")
+    logger.info(f"PR #{pr_number} detected! Commit: {commit_sha} -> {target_branch}")
 
     # 3. Trigger the autonomous agent in a background thread so we can
     #    return 202 immediately and not block the Flask worker.
     initial_state = {
-        "repo_url":     repo_url,
-        "pr_number":    pr_number,
-        "commit_sha":   commit_sha,
-        "github_token": dynamic_token,
+        "repo_url":      repo_url,
+        "pr_number":     pr_number,
+        "commit_sha":    commit_sha,
+        "github_token":  dynamic_token,
+        "target_branch": target_branch,
         "review_status": "pending",
-        "lint_errors":  [],
-        "comments":     [],
+        "lint_errors":   [],
+        "comments":      [],
     }
 
     def run_review():

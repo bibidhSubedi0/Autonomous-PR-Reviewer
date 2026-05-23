@@ -6,13 +6,14 @@ class AgentState(TypedDict):
     pr_number: int         # 42
     commit_sha: str        # The specific commit to review
     github_token: str      # Passed in to avoid frequent env lookups
+    target_branch: str     # The branch the PR is merging into (e.g. main, master)
 
-    local_path: Optional[str]   # Path to /tmp/xyz123
-    diff_content: str           # The string diff sent to AI
+    local_path: Optional[str]       # Path to /tmp/xyz123
+    diff_content: Optional[str]     # The string diff sent to AI
     
     # need to use 'operator.add' so multiple nodes can append errors/comments
     lint_errors: Annotated[List[str], operator.add]
     comments: Annotated[List[dict], operator.add]
     
     # Used by Conditional Edges to route logic
-    review_status: str     # "pending", "lint_failed", "success"
+    review_status: str     # "pending", "cloned", "lint_passed", "lint_failed", "completed", "done"
