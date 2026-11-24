@@ -33,10 +33,14 @@ def test_clone_repository_success(mock_mkdtemp, mock_subprocess, mock_temp_dir):
     # Verify strict order of Git commands
     # 1. git init
     assert mock_subprocess.call_args_list[0][0][0] == ["git", "init"]
-    # 2. git remote add (with token injected)
-    assert "https://fake-token@" in mock_subprocess.call_args_list[1][0][0][4]
-    # 3. git fetch (shallow)
-    assert "abc123456" in mock_subprocess.call_args_list[2][0][0]
+    # 2. git remote add: plain URL, token must NOT be stored in .git/config
+    remote_cmd = mock_subprocess.call_args_list[1][0][0]
+    assert remote_cmd[-1] == repo_url
+    assert "fake-token" not in " ".join(remote_cmd)
+    # 3. git fetch (shallow): token passed transiently via -c auth header
+    fetch_cmd = mock_subprocess.call_args_list[2][0][0]
+    assert "abc123456" in fetch_cmd
+    assert fetch_cmd[1] == "-c" and fetch_cmd[2].startswith("http.extraheader=Authorization: Basic ")
 
 @patch("subprocess.run")
 @patch("tools.git_ops.mkdtemp")
@@ -75,11 +79,11 @@ def test_get_diff_success(mock_subprocess):
     mock_subprocess.side_effect = [MagicMock(), mock_response]
 
     # Act
-    diff = get_diff("/fake/path")
+    diff = get_diff("/fake/path", "main", "fake-token")
 
     # Assert
     assert diff == "diff --git a/main.py..."
     # Verify the diff command structure
     cmd_used = mock_subprocess.call_args_list[1][0][0]
     assert cmd_used[0] == "git"
-    assert cmd_used[1] == "diff"
+    assert cmd_used == ["git", "diff", "origin/main", "HEAD"]
