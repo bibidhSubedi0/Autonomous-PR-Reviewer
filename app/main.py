@@ -1,4 +1,7 @@
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import hmac
 import hashlib
 import logging
@@ -24,8 +27,14 @@ server = Flask(__name__)
 def verify_signature(payload_bytes: bytes, signature_header: str) -> bool:
     secret_key = "GITHUB_WEBHOOK_SECRET_DEV" if os.getenv("ENV") == "dev" else "GITHUB_WEBHOOK_SECRET"
     secret = os.getenv(secret_key, "")
-    expected = "sha256=" + hmac.new(secret.encode(), payload_bytes, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, signature_header or "")
+    expected_256 = "sha256=" + hmac.new(secret.encode(), payload_bytes, hashlib.sha256).hexdigest()
+    result_256 = hmac.compare_digest(expected_256, signature_header or "")
+    expected_1 = "sha1=" + hmac.new(secret.encode(), payload_bytes, hashlib.sha1).hexdigest()
+    result_1 = hmac.compare_digest(expected_1, signature_header or "")
+    result = result_256 or result_1
+    if not result:
+        print(f"[SIGFAIL] secret_len={len(secret)} payload_len={len(payload_bytes)} header={signature_header[:50]}... expected_256={expected_256[:50]}... expected_1={expected_1[:50]}...")
+    return result
 
 
 @server.route('/webhook', methods=['POST'])

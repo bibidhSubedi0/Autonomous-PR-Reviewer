@@ -8,7 +8,7 @@ sys.path.append(os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(
  
 from tools.git_ops import clone_repository, get_diff, cleanup_repo
 from tools.linters import lint_repo
-from tools.ai_ops import analyze_code_with_gemini
+from tools.ai_ops import analyze_code_with_groq
 
 # Load .env for GITHUB_TOKEN and GEMINI_API_KEY
 load_dotenv()
@@ -57,7 +57,7 @@ def verify_logic_on_real_repo():
             print("Diff is empty. Something is wrong with the comparison.")
         else:
             print(f"Sending {len(diff)} chars to Gemini...")
-            comments = analyze_code_with_gemini(diff)
+            comments = analyze_code_with_groq(diff)
             
             print(f"Gemini responded with {len(comments)} comments.")
             print(json.dumps(comments, indent=2))

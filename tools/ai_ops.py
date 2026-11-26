@@ -1,17 +1,15 @@
 import os
 import json
 from typing import List, Dict
-from google import genai
-from google.genai import types
+from groq import Groq
 
 
 # ---------------------------------------------------------------------------
 # Diff preprocessing
 # ---------------------------------------------------------------------------
 
-# After filtering, cap at this many characters before sending to Gemini.
-# ~30k chars ≈ ~7.5k tokens — well within gemini-2.5-flash's 1M token window
-# but keeps cost and latency reasonable for typical 1000 LOC PRs.
+# After filtering, cap at this many characters before sending to model.
+# Adjust based on the model's context window.
 MAX_DIFF_CHARS = 30_000
 
 
@@ -41,7 +39,7 @@ def _filter_diff(diff: str) -> str:
 def _truncate_diff(diff: str, max_chars: int = MAX_DIFF_CHARS) -> str:
     """
     Safety net: if the filtered diff is still too large, truncate it
-    and append a note so Gemini knows it's seeing a partial diff.
+    and append a note so the model knows it's seeing a partial diff.
     """
     if len(diff) <= max_chars:
         return diff
@@ -71,18 +69,18 @@ def preprocess_diff(diff: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Gemini review
+# AI review via Groq
 # ---------------------------------------------------------------------------
 
-def analyze_code_with_gemini(diff: str) -> List[Dict]:
+def analyze_code_with_groq(diff: str) -> List[Dict]:
     """
-    Preprocesses the diff and sends it to Gemini for review.
-    Uses the new google-genai SDK (replaces deprecated google-generativeai).
+    Preprocesses the diff and sends it to Groq for review.
+    Uses the Groq SDK with Llama models.
     Supports Python, C/C++, and JavaScript/TypeScript diffs.
     """
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        print("[ai_ops] Error: GEMINI_API_KEY not found in environment.")
+        print("[ai_ops] Error: GROQ_API_KEY not found in environment.")
         return []
 
     if not diff or not diff.strip():
@@ -92,65 +90,68 @@ def analyze_code_with_gemini(diff: str) -> List[Dict]:
     # Preprocess before sending
     diff = preprocess_diff(diff)
 
-    client = genai.Client(api_key=api_key)
+    client = Groq(api_key=api_key)
 
     system_prompt = """
 You are a Senior Software Engineer acting as a Code Reviewer.
 
-INPUT: A Git diff (possibly filtered/truncated) that may contain Python, C/C++, and/or JavaScript/TypeScript changes.
-TASK: Identify potential bugs, security risks, memory issues, and logic errors.
-IGNORE: Formatting/whitespace changes (a linter handles those separately).
-
-Language-specific guidance:
-- Python: watch for None-dereferences, mutable default args, broad except clauses, missing input validation.
-- C/C++: watch for buffer overflows, uninitialized variables, memory leaks, missing null checks, unsafe pointer arithmetic.
-- JavaScript/TypeScript: watch for == vs ===, async/await errors not caught, prototype pollution, missing error handling in promises.
-
-OUTPUT: A strictly valid JSON array. Each object must match this schema exactly:
-[
-    {
-        "file": "path/to/filename.ext",
-        "line": 10,
-        "comment": "Brief, actionable feedback."
-    }
-]
-
-Return [] if no issues are found. Do not include any text outside the JSON array.
-Limit your response to the 10 most important issues maximum.
+OUTPUT INSTRUCTION: Output ONLY a valid JSON array with no surrounding text, markdown markers, or explanations. Format each issue as {"file": "path/to/filename.ext", "line": 10, "comment": "Brief, actionable feedback."}. Return [] if no issues are found. Maximum 10 issues.
 """
 
     try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=f"{system_prompt}\n\nHere is the diff to review:\n\n{diff}",
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-            ),
+        response = client.chat.completions.create(
+            model="qwen/qwen3.8-27b",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Here is the diff to review:\n\n{diff}"},
+            ],
+            temperature=0,
+            max_tokens=1024,
         )
 
-        raw = response.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
-        comments = json.loads(raw)
-
-        if isinstance(comments, list):
-            valid = []
-            for item in comments:
+        raw = response.choices[0].message.content.strip()
+        # Strip markdown code block markers if present
+        raw = raw.lstrip("```").rstrip("```").strip()
+        
+        # DEBUG: Print raw output
+        print(f"[ai_ops] RAW MODEL OUTPUT: {raw[:500]}")
+        
+        comments = []
+        
+        # Try to parse as JSON array directly
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                for item in parsed:
+                    if isinstance(item, dict) and {"file", "line", "comment"} <= item.keys():
+                        comments.append(item)
+                # Cap at 10
+                if len(comments) > 10:
+                    comments = comments[:10]
+                return comments
+        except (json.JSONDecodeError, TypeError):
+            pass
+        
+        # Try to find JSON in the response text
+        # Look for patterns like {"file": ..., "line": ..., "comment": ...}
+        import re
+        # Find all dict-like patterns with file, line, comment keys
+        dict_pattern = r'\{[^}]*"file"[^}]*"line"[^}]*"comment"[^}]*\}'
+        matches = re.findall(dict_pattern, raw)
+        print(f"[ai_ops] Regex matches: {matches[:3]}")  # Log first 3 matches
+        for match in matches:
+            try:
+                item = json.loads(match)
                 if isinstance(item, dict) and {"file", "line", "comment"} <= item.keys():
-                    valid.append(item)
-                else:
-                    print(f"[ai_ops] Dropping malformed comment entry: {item}")
-
-            # Hard cap — never post more than 10 comments
-            if len(valid) > 10:
-                print(f"[ai_ops] Capping comments from {len(valid)} to 10.")
-                valid = valid[:10]
-
-            return valid
-        else:
-            print("[ai_ops] AI returned invalid format (not a list).")
-            return []
+                    comments.append(item)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if len(comments) > 10:
+            comments = comments[:10]
+        return comments
 
     except json.JSONDecodeError as e:
-        print(f"[ai_ops] JSON parse failed: {e}\nRaw response: {response.text[:300]}")
+        print(f"[ai_ops] JSON parse failed: {e}\nRaw response: {raw[:300]}")
         return []
     except Exception as e:
         print(f"[ai_ops] AI Review Failed: {e}")
