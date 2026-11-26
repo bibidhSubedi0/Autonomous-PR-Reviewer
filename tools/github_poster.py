@@ -19,9 +19,14 @@ def post_review_comments(repo_url: str, pr_number: int, comments: list, token: s
     # Format comments for the GitHub Pull Request Review API
     github_comments = []
     for c in comments:
+        # Use the file path as-provided by the AI
+        # GitHub needs the path to match a file in the PR
+        file_path = c["file"]
+        line_num = int(c["line"])
+
         github_comments.append({
-            "path": c["file"],
-            "line": int(c["line"]),
+            "path": file_path,
+            "line": line_num,
             "body": f"**AI Review:** {c['comment']}",
         })
 
